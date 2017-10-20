@@ -1,0 +1,2 @@
+class CalendarNameNotFoundException(Exception):
+    pass

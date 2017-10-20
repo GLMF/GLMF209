@@ -1,0 +1,19 @@
+<!doctype html>
+
+<html lang="fr">
+    <head>
+        <meta charset="utf-8" />
+	<title>Authentification deux facteurs</title>
+    </head>
+
+    <body>
+        <form action="/connexion.py" method="post">
+	     <fieldset>
+	         <legend>Identification</legend>
+		 <label for="code">Code :</label>
+		 <input type="password" name="code" id="code" placeholder="Le code envoyé par sms" /><br />
+		 <input type="submit" name="send" value="Connexion"/>
+	     </fieldset>
+	</form>
+    </body>
+</html>

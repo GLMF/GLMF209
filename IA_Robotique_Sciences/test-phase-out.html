@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="fr"><head>
+<meta http-equiv="content-type" content="text/html; charset=UTF-8">
+<meta charset="UTF-8">
+<title>Test Phase-out</title>
+
+<style>
+div#border{
+  border:2px solid #ff0000;
+  border-left-width:0px;
+  border-bottom-width:0px;
+  width: 512px;
+}
+div#outerframe{
+  height: 512px;
+  cursor: crosshair;
+  background-color: #AAA;
+}
+div#innerframe{
+  height: 0px;
+  width: 0px;
+  background-color: #DDD;
+  border:256px solid #BEC;
+  border-top-color:#DDD;
+  border-right-color:#DDD;
+}
+</style>
+
+<script>
+var outerId, innerId, resultId;
+
+function toBin(n,l) {
+  var m="";
+  while (l>0) {
+    m= (n&1)+m;
+    n>>>=1;
+    l--;
+  }
+  return m;
+}
+
+function GetRelativeCoord(e) {
+  e = e || window.event;
+  var x = 0;
+  var y = 0;
+  if (e.clientX || e.clientY) {
+    x = e.clientX;
+    y = e.clientY;
+  }
+  else if (e.pageX || e.pageY) {
+    x = e.pageX;
+    y = e.pageY;
+  }
+  var bounds = outerId.getBoundingClientRect();
+  x -= bounds.left;
+  y -= bounds.top;
+
+  if (x>511) x=511;
+  if (y>511) y=511;
+  return { x: x|0, y: y|0 }
+}
+
+function innerMove(e) {
+  var C=GetRelativeCoord(e),
+  X = C.x;
+  Y = C.y;
+  if (X >= Y) {
+
+    var lim=X, n=Y, mask=0, k=0, l, m, o;
+
+    // generate mask from lim
+    if (lim>0) {
+                      k =1; l=lim;
+      if (l & ~255) { k+=8; l>>=8; }
+      if (l & ~ 15) { k+=4; l>>=4; }
+      if (l & ~  3) { k+=2; l>>=2; }
+      if (l & ~  1) { k+=1; l>>=1; }
+      mask=(1<<k)-1; //>
+    }
+
+    l=k;
+    m=n;
+    if (m > (((lim<<1) &mask) |1 )) {  //>
+      l--;
+      m = m+(mask>>1) -lim;
+    }
+ 
+    o=m;
+    if (m > (((lim<<1) &mask) |1 )) { //>
+      o=(m+lim)-(mask>>1);
+    }
+
+    resultId.innerHTML=" lim="+X+"  mask="+mask+"  k="+k
+                    +"\n   n="+Y+"     m="+m+"   l="+l+"   o="+o
+                    +"\n "+toBin(m,l);
+  }
+}
+
+function start() {
+  outerId=document.getElementById("outerframe");
+  innerId=document.getElementById("innerframe");
+  resultId=document.getElementById("result");
+
+}
+</script>
+
+</head>
+<body onload="start()" bgcolor="#BEC">
+
+<p>Test for the <a href="https://hackaday.io/project/24834-3rgb-image-lossless-compression-format/log/60755-design-of-the-phase-out-code">Phase-out encoder/decoder</a>:</p>
+
+<pre id="result">.
+.
+</pre>
+
+
+<div id="border">
+ <div id="outerframe" onmousemove="innerMove(event)">
+  <div id="innerframe">
+  </div>
+ </div>
+</div>
+
+<pre style="font-size=50%">
+
+
+Created mer. mai 31 07:47:52 CEST 2017 by Yann Guidon
+version dim. juin  4 02:38:50 CEST 2017
+
+</pre>
+</body></html>

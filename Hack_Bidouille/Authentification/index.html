@@ -1,0 +1,21 @@
+<!doctype html>
+
+<html lang="fr">
+    <head>
+        <meta charset="utf-8" />
+	<title>Authentification deux facteurs</title>
+    </head>
+
+    <body>
+        <form action="/connexion.py" method="post">
+	     <fieldset>
+	         <legend>Identification</legend>
+		 <label for="login">Login :</label>
+		 <input type="text" name="login" id="login" placeholder="Votre identifiant" /><br />
+		 <label for="password">Password :</label>
+		 <input type="password" name="password" id="password" placeholder="Votre mot de passe" /><br />
+		 <input type="submit" name="send" value="Connexion"/>
+	     </fieldset>
+	</form>
+    </body>
+</html>

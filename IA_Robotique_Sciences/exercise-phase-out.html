@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<html lang="fr"><head>
+<meta http-equiv="content-type" content="text/html; charset=UTF-8">
+<meta charset="UTF-8">
+<title>Test Bitstream + phase-out</title>
+
+<script>
+var sendId, rcvId, dataId, m,
+    sendReg, rcvReg,
+    clicked=1, // Start with no computation
+    Processed=0,
+    wordstream=[/*empty*/],
+    cycle=0,
+    sequence=0,
+
+    streamVal=[ 0, 1, 0, 1,  4,  8, 21, 17, 13, 12,  24,  42],
+    streamLim=[ 2, 5, 0, 7, 12, 23, 35, 24, 57, 35, 123,  54];
+
+function toBin(n,l) {
+  var m="";
+  while (l>0) {
+    m= (n&1)+m;
+    n>>>=1;
+    l--;
+  }
+  return m;
+}
+
+function init_stream() {
+  sendReg={
+    Register: 0,   // Pro tip: the shift register can contain at most 31 bits, MSB unused.
+    offset: 31  // Empty, ready to get data
+  };
+  rcvReg={
+    Register: 0,
+    offset: 0,  // Empty : needs refill
+    index: 0
+  };
+  wordstream=[/*empty*/];
+}
+
+/////////////////////////////////////////////////
+
+function send_word (value) {
+  wordstream.push(value);
+  m+= "   out:"+toBin(value,16);
+}
+
+function receive_word () {
+  var i=rcvReg.index;
+  if (i>=wordstream.length) {
+//    alert("trying to read a word beyond bounds");
+    m+="\n!!!trying to read a word beyond bounds\n in:0000000000000000";
+    return 0;
+  }
+  var t=wordstream[i];
+  m+= "\n in:"+toBin(t,16);
+  rcvReg.index=i+1;
+  return t;
+}
+
+/////////////////////////////////////////////////
+
+function send_bits (value, size) {
+  var newOffset = sendReg.offset,
+      reg=sendReg.Register;
+
+  size = +size; // cast to int
+  if ((size > 16)||(size < 0)) { // >
+    alert("size "+size+" out of the [0:15] range");
+    return;
+  }
+
+  if (size == 0) {
+    // skip
+    m+="\n {skip 0}"
+    return;
+  }
+
+  // safety checks
+  value = +value; // cast to int
+  if ((value > 65535)||(value < 0)) { // >
+    alert("value "+value+" out of the [0:65535] range");
+    return;
+  }
+
+  newOffset -= size;
+  if (newOffset < 0) { // >
+    alert("Send register has no room ???");
+    return;
+  }
+
+//  mask = (1<<size)-1; // >
+//  if (value & ~mask) {
+  if (value >>> size) {
+    alert("data has extra bits");
+    return;
+  }
+//value &= mask; useless because we just proved there is no extra bit
+
+  reg |= value << newOffset ; // >
+
+  m+= "\n"+toBin(sendReg.Register,31)+"|"+toBin(value,16)+"="+toBin(reg,31)
+  +"     "+toBin(sendReg.offset,5)+"-"+toBin(size,5)+"="+toBin(newOffset,5)
+  +"  "+sendReg.offset+"-"+size+"="+newOffset;
+
+
+//if (newOffset <= 16) { // >
+  if (~newOffset & 16) { // test MSB of the accumulator
+    var word=reg >>> 15;
+    // Send the high half:
+    send_word(word);
+    // readjust the shift register
+    reg = (reg & 65535) << 16; //>
+    newOffset += 16;
+  }
+  sendReg.Register=reg;
+  sendReg.offset  =newOffset;
+}
+
+function receive_bits(size) {
+  var Offset = rcvReg.offset,
+      reg=rcvReg.Register,
+      value;
+
+  m+= "\n---  receive_bits("+size+") offset="+Offset+"  reg="+reg;
+
+  if (Offset <0) { // >
+    alert("offset is negative ???");
+    return -1;
+  }
+
+  size = +size; // cast to int
+  if ((size > 16)||(size < 0)) { // >
+    alert("size "+size+" out of the [0:15] range");
+    return -1;
+  }
+
+  Processed++;
+
+  if (size == 0) {
+    // skip
+    m+="\n {skip 0}";
+    return 0;
+  }
+
+  // the actual work:
+
+  // should another word be shifted in ?
+  Offset -= size; // (used for comparison as well)
+  if (Offset < 0) { //>
+    reg = (reg << 16) | receive_word(); //>
+    Offset += 16;
+  }
+
+  value = (reg >> (Offset & 15)) & ((1<<size)-1); //>
+  m+="\n"+toBin(rcvReg.offset,5)+"-"+toBin(size,5)+"="+toBin(Offset,5)
+   +"   reg="+toBin(reg,31)+"  result="+toBin(value, size);
+
+  rcvReg.Register=reg;
+  rcvReg.offset=Offset;
+  return value;
+}
+
+function send_phaseout(val, lim){
+  m+="\nSEND: n="+val+", lim="+lim;
+
+  var k, l, n=val, mask=0;
+
+  if (lim <= 0) { //>
+    m+="\n {skip 0}";
+    return;
+  }
+
+  // generate mask from lim
+                  k =1; l=lim;
+  if (l & ~255) { k+=8; l>>=8; }
+  if (l & ~ 15) { k+=4; l>>=4; }
+  if (l & ~  3) { k+=2; l>>=2; }
+  if (l & ~  1) { k+=1; l>>=1; }
+  mask=(1<<k)-1; //>
+
+  if (n > (((lim<<1) &mask) |1 )) {  //>
+    k--;
+    n = n+(mask>>1) -lim;
+  }
+  m+="   n'="+toBin(n, k)+"   "+k+" bits";
+
+  send_bits(n, k);
+}
+
+
+function receive_phaseout(lim){
+  m+="\nRCV: lim="+lim;
+  var val=0, k, l, mask=0;
+
+  if (lim <= 0) { //>
+    m+="\n {skip 0}";
+    return 0;
+  }
+
+  // generate mask from lim
+                  k =1; l=lim;
+  if (l & ~255) { k+=8; l>>=8; }
+  if (l & ~ 15) { k+=4; l>>=4; }
+  if (l & ~  3) { k+=2; l>>=2; }
+  if (l & ~  1) { k+=1; l>>=1; }
+  mask=(1<<k)-1; //>
+  m+="   "+k+" bits";
+
+  val=receive_bits(k);
+  if (val > (((lim<<1) &mask) |1 )) {  //>
+    val = ((val>>1)+lim)-(mask>>1);
+    rcvReg.offset++;
+  }
+  m+="   val'="+toBin(val, k)+"   "+k+" bits";
+
+  return val;
+}
+
+function exercise() {
+  var u=1;
+  if (!sequence)
+    u=1000;
+
+  for (var n=0; n<u; n++) { //>
+    init_stream();
+
+    // Display the numbers to encode
+    m="";
+    for (var i=0; i<streamVal.length; i++){ //>
+      m+=" ("+streamVal[i]+","+streamLim[i]+")";
+    }
+    dataId.innerHTML="Processed: "+Processed+"<br>input data: "+m;
+
+    ////////////////////////////// test emission //////////////////////////////
+
+    m="";
+    for (var i=0; i<streamVal.length; i++){ //>
+      send_phaseout(streamVal[i], streamLim[i]);
+    }
+
+    // purge:
+    m+="\noffset="+sendReg.offset+" => purge";
+    send_bits (0, (sendReg.offset - 15) & 15); // at most one word to purge
+    // The value 0 could be something else...
+    // NOTE: Should be adjusted for byte granularity later.
+
+    m+="\n final: "+toBin(sendReg.Register,31)+"    "+toBin(sendReg.offset,5);
+    sendId.innerHTML=m;
+
+    ////////////////////////////// test reception //////////////////////////////
+
+    m="";
+    for (var i=0; i<streamVal.length; i++){ //>
+      var t=receive_phaseout(streamLim[i]);
+//      m+="\n### received "+t;
+      if (t != streamVal[i]) {
+           m+="\n### received "+t+"  expected "+streamVal[i];
+        alert("\n### received "+t+"  expected "+streamVal[i]);
+        break;
+      }
+    }
+
+    m+="\n final: "+toBin(rcvReg.Register,31)+"    "+toBin(rcvReg.offset,5);
+    rcvId.innerHTML=m;
+
+    // prepare the data for the next turn:
+    streamLim=[]; 
+    streamVal=[];
+
+    if (!sequence) {
+      for (var i=0; i<50; i++){ //>
+        var b=Math.floor(Math.random()*16);
+        var k=Math.floor(Math.random()*(1<<b)) |(1<<b); //>
+        var l=Math.floor(Math.random()*(k+1));
+        streamLim[i]=k;
+        streamVal[i]=l;
+      }
+    }
+    else{
+      for (var i=0; i<=cycle; i++){ //>
+        streamLim[i]=cycle;
+        streamVal[i]=i;
+      }
+      cycle++;
+    }
+  }
+
+//  if (!clicked)
+//    setTimeout(exercise, 100);
+}
+/*
+function click_evt() {
+  if (clicked) {
+    clicked=0;
+    setTimeout(exercise, 10);
+  }
+  else
+    clicked=1;
+}*/
+
+function start() {
+  sendId=document.getElementById("send");
+  rcvId=document.getElementById("receive");
+  dataId=document.getElementById("data");
+  exercise();
+}
+
+</script>
+
+</head>
+<body onload="start()">
+
+<pre style="font-size=50%">
+Created mer. mai 31 07:47:52 CEST 2017 by Yann Guidon 
+Version Sat. Jun  3 04:07:16 CEST 2017 : works !
+version Sat. Jun  3 06:13:55 CEST 2017 : exercise ok.
+version dim. juin 4 03:51:23 CEST 2017 : phase-out
+version dim. juin 4 10:55:31 CEST 2017 : phase-out+bitstream ok !
+
+
+
+</pre>
+<p>Test for the <a href="https://hackaday.io/project/24834/log/60439-phase-out-encoderdecoder">bitstream&amp;phase-out insertion/extraction algorithm</a>:</p>
+<button onclick="cycle=0; sequence=1; exercise(); exercise();">Sequence</button>
+<button onclick="         sequence=0; exercise(); exercise();">Random</button>
+<button onclick="                                 exercise();">Step</button>
+<div id="data">:</div>
+<hr>
+<pre id="send">: (please enable JavaScript)</pre>
+<hr>
+<pre id="receive">:</pre>
+
+</body></html>
